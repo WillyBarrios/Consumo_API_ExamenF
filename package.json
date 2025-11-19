@@ -1,0 +1,29 @@
+{
+  "name": "consumo-api-examen-final",
+  "version": "1.0.0",
+  "description": "Proyecto completo de consumo de API con Node.js backend y Astro frontend",
+  "scripts": {
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install", 
+    "install:all": "npm run install:backend && npm run install:frontend",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:backend": "cd backend && npm start",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm run preview",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "health": "curl http://localhost:3001/health"
+  },
+  "keywords": ["api", "nodejs", "astro", "examen", "backend", "frontend"],
+  "author": "WillyBarrios",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
