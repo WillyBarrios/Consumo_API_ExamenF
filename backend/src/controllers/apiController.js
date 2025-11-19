@@ -459,6 +459,172 @@ class BanguatController {
       });
     }
   }
+
+  // Método para verificar datos reales en BD
+  async verificarTablas(req, res) {
+    try {
+      const [monedas, tiposCambio, logs] = await Promise.all([
+        databaseService.executeQuery('SELECT COUNT(*) as total FROM monedas WHERE activa = TRUE'),
+        databaseService.executeQuery('SELECT COUNT(*) as total FROM tipos_cambio_historico WHERE activo = TRUE'),
+        databaseService.executeQuery('SELECT COUNT(*) as total FROM log_consultas_api WHERE DATE(fecha_consulta) = CURDATE()')
+      ]);
+
+      // Obtener últimos registros de cada tabla
+      const [ultimasMonedas, ultimosCambios, ultimosLogs] = await Promise.all([
+        databaseService.executeQuery('SELECT * FROM monedas WHERE activa = TRUE ORDER BY fecha_actualizacion DESC LIMIT 5'),
+        databaseService.executeQuery('SELECT * FROM tipos_cambio_historico WHERE activo = TRUE ORDER BY fecha_consulta DESC LIMIT 5'),
+        databaseService.executeQuery('SELECT * FROM log_consultas_api ORDER BY fecha_consulta DESC LIMIT 3')
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          contadores: {
+            monedas: monedas[0]?.total || 0,
+            tiposCambio: tiposCambio[0]?.total || 0,
+            logsHoy: logs[0]?.total || 0
+          },
+          muestras: {
+            ultimasMonedas,
+            ultimosCambios,
+            ultimosLogs
+          }
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Error verificando tablas',
+        message: error.message
+      });
+    }
+  }
+
+  // Método para obtener respuesta XML cruda de Banguat (debug)
+  async obtenerXmlCrudo(req, res) {
+    try {
+      const axios = require('axios');
+      
+      const soapTemplate = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+               xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <TipoCambioDia xmlns="http://www.banguat.gob.gt/variables/ws/" />
+  </soap:Body>
+</soap:Envelope>`;
+
+      const headers = {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': 'http://www.banguat.gob.gt/variables/ws/TipoCambioDia'
+      };
+
+      const response = await axios.post('https://www.banguat.gob.gt/variables/ws/tipocambio.asmx', soapTemplate, { 
+        headers,
+        timeout: 30000
+      });
+
+      res.json({
+        success: true,
+        data: {
+          statusCode: response.status,
+          contentLength: response.data.length,
+          xmlResponse: response.data,
+          headers: response.headers
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Error obteniendo XML crudo',
+        message: error.message
+      });
+    }
+  }
+
+  // Consultar directamente las tablas sin simulación
+  async consultarTablasDirectas(req, res) {
+    try {
+      const [cambioDolarTabla, tiposCambioTabla, monedasTabla] = await Promise.all([
+        databaseService.executeQuery('SELECT * FROM cambio_dolar_referencia ORDER BY fecha DESC LIMIT 5'),
+        databaseService.executeQuery('SELECT * FROM tipos_cambio_historico WHERE activo = TRUE ORDER BY fecha_consulta DESC LIMIT 5'),
+        databaseService.executeQuery('SELECT * FROM monedas WHERE activa = TRUE ORDER BY codigo_moneda')
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          cambioDolarReferencia: cambioDolarTabla,
+          tiposCambioHistorico: tiposCambioTabla,
+          monedas: monedasTabla
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Error consultando tablas directas',
+        message: error.message
+      });
+    }
+  }
+
+  // Probar stored procedures manualmente
+  async testStoredProcedures(req, res) {
+    try {
+      console.log('🧪 Probando stored procedures...');
+      
+      // Datos de prueba basados en la respuesta real de Banguat
+      const fecha = '2025-11-18';  // Formato DD/MM/YYYY -> YYYY-MM-DD
+      const referenciaReal = 7.65102;
+
+      console.log('1. Probando sp_insertar_cambio_dolar...');
+      await databaseService.executeQuery('CALL sp_insertar_cambio_dolar(?, ?)', [fecha, referenciaReal]);
+
+      console.log('2. Probando sp_insertar_tipo_cambio...');
+      await databaseService.executeQuery('CALL sp_insertar_tipo_cambio(?, ?, ?, ?, ?)', [
+        2,              // moneda_id = 2 (Dólar)
+        fecha,          // fecha
+        0,              // tipo_compra
+        0,              // tipo_venta  
+        referenciaReal  // tipo_referencia
+      ]);
+
+      console.log('3. Verificando si se insertaron...');
+      const [verificarDolar, verificarTipo] = await Promise.all([
+        databaseService.executeQuery('SELECT * FROM cambio_dolar_referencia WHERE fecha = ?', [fecha]),
+        databaseService.executeQuery('SELECT * FROM tipos_cambio_historico WHERE moneda_id = ? AND fecha = ?', [2, fecha])
+      ]);
+
+      res.json({
+        success: true,
+        message: 'Stored procedures probados',
+        data: {
+          proceduresExecuted: true,
+          resultados: {
+            cambioDolarInsertado: verificarDolar,
+            tipoCambioInsertado: verificarTipo
+          },
+          datosPrueba: {
+            fecha,
+            referencia: referenciaReal
+          }
+        },
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error('❌ Error probando stored procedures:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error probando stored procedures',
+        message: error.message,
+        stack: error.stack
+      });
+    }
+  }
 }
 
 module.exports = new BanguatController();

@@ -27,6 +27,11 @@ router.get('/test/database', banguatController.testDatabase);
 // Nuevas rutas SOAP
 router.get('/test/soap-connection', banguatController.testSoapConnection);
 router.post('/actualizar-soap', banguatController.actualizarDesdeSoap);
+router.get('/verificar-tablas', banguatController.verificarTablas);
+router.get('/debug/xml-crudo', banguatController.obtenerXmlCrudo);
+router.get('/debug/tablas-directas', banguatController.consultarTablasDirectas);
+router.get('/test/stored-procedures', banguatController.testStoredProcedures);
+router.get('/verificar-tablas', banguatController.verificarTablas);
 
 // ===== RUTAS DE COMPATIBILIDAD (para frontend existente) =====
 

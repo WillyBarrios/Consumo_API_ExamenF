@@ -114,14 +114,22 @@ class BanguatSoapService {
     try {
       console.log('🔄 Iniciando procesamiento XML...');
       
+      // DEBUG: Mostrar una muestra de la respuesta XML
+      console.log('📄 XML Response Preview (first 500 chars):', xmlData.substring(0, 500));
+      
       // Parsear la respuesta XML
       const parsed = await this.parser.parseStringPromise(xmlData);
       console.log('✅ XML parseado correctamente');
+      
+      // DEBUG: Mostrar la estructura parseada
+      console.log('🔍 Estructura parseada:', JSON.stringify(parsed, null, 2).substring(0, 1000));
 
       // Navegar por la estructura SOAP response
       const soapBody = parsed['soap:Envelope']['soap:Body'];
       const tipoCambioResponse = soapBody['TipoCambioDiaResponse'];
       const tipoCambioResult = tipoCambioResponse['TipoCambioDiaResult'];
+
+      console.log('🎯 TipoCambioResult keys:', Object.keys(tipoCambioResult || {}));
 
       const resultado = {
         monedas: [],
@@ -131,7 +139,33 @@ class BanguatSoapService {
         fechaConsulta: new Date().toISOString()
       };
 
-      // Procesar Variables (catálogo de monedas)
+      // Procesar CambioDolar (referencia del dólar - esto SÍ viene en la respuesta)
+      if (tipoCambioResult.CambioDolar && tipoCambioResult.CambioDolar.VarDolar) {
+        const varDolar = tipoCambioResult.CambioDolar.VarDolar;
+        console.log('💰 Procesando CambioDolar:', varDolar);
+
+        // Convertir fecha de DD/MM/YYYY a YYYY-MM-DD
+        const fechaOriginal = varDolar.fecha || '';
+        const fechaConvertida = this.convertirFecha(fechaOriginal);
+
+        resultado.cambioDolar.push({
+          fecha: fechaConvertida,
+          referencia: parseFloat(varDolar.referencia) || 0
+        });
+
+        // También agregamos como tipo de cambio del dólar (moneda 2)
+        resultado.tiposCambio.push({
+          moneda: 2, // Código del dólar
+          fecha: fechaConvertida,
+          venta: 0,
+          compra: 0,
+          referencia: parseFloat(varDolar.referencia) || 0
+        });
+
+        console.log('✅ Fecha convertida de', fechaOriginal, 'a', fechaConvertida);
+      }
+
+      // Procesar Variables (catálogo de monedas) - NOTA: Este endpoint NO devuelve esto
       if (tipoCambioResult.Variables && tipoCambioResult.Variables.Variable) {
         const variables = Array.isArray(tipoCambioResult.Variables.Variable) 
           ? tipoCambioResult.Variables.Variable 
@@ -146,9 +180,11 @@ class BanguatSoapService {
             simbolo: this.obtenerSimboloMoneda(parseInt(variable.moneda) || 0)
           });
         }
+      } else {
+        console.log('ℹ️  No se encontraron Variables (monedas) en la respuesta XML');
       }
 
-      // Procesar CambioDia (tipos de cambio del día)
+      // Procesar CambioDia (tipos de cambio del día) - NOTA: Este endpoint NO devuelve esto
       if (tipoCambioResult.CambioDia && tipoCambioResult.CambioDia.Var) {
         const cambios = Array.isArray(tipoCambioResult.CambioDia.Var) 
           ? tipoCambioResult.CambioDia.Var 
@@ -159,17 +195,20 @@ class BanguatSoapService {
         for (const cambio of cambios) {
           resultado.tiposCambio.push({
             moneda: parseInt(cambio.moneda) || 0,
-            fecha: cambio.fecha || new Date().toISOString().split('T')[0],
+            fecha: this.convertirFecha(cambio.fecha),
             venta: parseFloat(cambio.venta) || 0,
-            compra: parseFloat(cambio.compra) || 0
+            compra: parseFloat(cambio.compra) || 0,
+            referencia: null
           });
         }
+      } else {
+        console.log('ℹ️  No se encontraron CambioDia (tipos de cambio) en la respuesta XML');
       }
 
       // Procesar TotalItems
       resultado.totalItems = parseInt(tipoCambioResult.TotalItems) || 0;
 
-      console.log(`✅ Procesamiento completado: ${resultado.monedas.length} monedas, ${resultado.tiposCambio.length} tipos de cambio`);
+      console.log(`✅ Procesamiento completado: ${resultado.monedas.length} monedas, ${resultado.tiposCambio.length} tipos de cambio, ${resultado.cambioDolar.length} cambio dólar`);
 
       return resultado;
 
@@ -184,7 +223,7 @@ class BanguatSoapService {
     try {
       console.log('💾 Guardando datos en base de datos...');
 
-      // Guardar monedas
+      // Guardar monedas (si las hay)
       for (const moneda of data.monedas) {
         try {
           await databaseService.insertarMoneda(
@@ -205,7 +244,7 @@ class BanguatSoapService {
             cambio.fecha,
             cambio.compra,
             cambio.venta,
-            null // tipo_referencia se mantiene null para cambios normales
+            cambio.referencia // Incluir la referencia
           );
         } catch (error) {
           console.error(`⚠️  Error guardando tipo cambio moneda ${cambio.moneda}:`, error.message);
@@ -252,6 +291,34 @@ class BanguatSoapService {
       10: '$'      // Peso AR
     };
     return simbolos[codigoMoneda] || null;
+  }
+
+  // Método para convertir fecha de DD/MM/YYYY a YYYY-MM-DD
+  convertirFecha(fechaOriginal) {
+    try {
+      if (!fechaOriginal) {
+        return new Date().toISOString().split('T')[0];
+      }
+
+      // Si ya está en formato YYYY-MM-DD, devolverla tal como está
+      if (fechaOriginal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return fechaOriginal;
+      }
+
+      // Convertir de DD/MM/YYYY a YYYY-MM-DD
+      if (fechaOriginal.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const [dia, mes, año] = fechaOriginal.split('/');
+        return `${año}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+      }
+
+      // Si no reconoce el formato, usar fecha actual
+      console.log('⚠️  Formato de fecha no reconocido:', fechaOriginal);
+      return new Date().toISOString().split('T')[0];
+
+    } catch (error) {
+      console.error('❌ Error convirtiendo fecha:', error);
+      return new Date().toISOString().split('T')[0];
+    }
   }
 
   // Métodos para el controller
