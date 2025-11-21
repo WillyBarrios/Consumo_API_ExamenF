@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 // Middleware para logging de requests
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
-  console.log(`${timestamp} - ${req.method} ${req.originalUrl}`);
+  console.log(`[${timestamp}] ${req.method} ${req.originalUrl}`);
   next();
 });
 
@@ -85,7 +85,7 @@ app.get('/info', (req, res) => {
 
 // Manejo de errores
 app.use((err, req, res, next) => {
-  console.error(`❌ Error: ${err.stack}`);
+  console.error(`ERROR: ${err.stack}`);
   res.status(500).json({ 
     success: false,
     error: 'Error interno del servidor',
@@ -108,56 +108,56 @@ app.use('*', (req, res) => {
 // Función para inicializar la aplicación
 async function initializeApp() {
   try {
-    console.log('🚀 Iniciando backend API Banguat...');
+    console.log('Iniciando backend API Banguat...');
     
     // Test de conexión a base de datos
     const dbConnected = await databaseService.testConnection();
     if (!dbConnected) {
-      console.warn('⚠️  Advertencia: No se pudo conectar a la base de datos');
-      console.warn('   El servidor funcionará pero sin persistencia de datos');
+      console.warn('ADVERTENCIA: No se pudo conectar a la base de datos');
+      console.warn('El servidor funcionara pero sin persistencia de datos');
     }
 
     // Iniciar servidor
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Servidor backend ejecutándose en http://localhost:${PORT}`);
-      console.log(`📊 Health check disponible en http://localhost:${PORT}/health`);
-      console.log(`ℹ️  Información del sistema en http://localhost:${PORT}/info`);
-      console.log(`🏦 API SOAP Banguat: ${process.env.SOAP_API_URL}`);
-      console.log(`🗄️  Base de datos: ${process.env.DB_NAME}@${process.env.DB_HOST}`);
+      console.log(`Servidor backend ejecutandose en http://localhost:${PORT}`);
+      console.log(`Health check disponible en http://localhost:${PORT}/health`);
+      console.log(`Informacion del sistema en http://localhost:${PORT}/info`);
+      console.log(`API SOAP Banguat: ${process.env.SOAP_API_URL}`);
+      console.log(`Base de datos: ${process.env.DB_NAME}@${process.env.DB_HOST}`);
       console.log('');
-      console.log('📋 Endpoints principales:');
+      console.log('Endpoints principales:');
       console.log('   GET  /api/tipos-cambio    - Tipos de cambio actuales');
       console.log('   GET  /api/monedas         - Lista de monedas');
-      console.log('   GET  /api/dolar           - Cambio del dólar');
+      console.log('   GET  /api/dolar           - Cambio del dolar');
       console.log('   POST /api/actualizar      - Actualizar datos desde SOAP');
-      console.log('   GET  /api/estadisticas    - Estadísticas del sistema');
+      console.log('   GET  /api/estadisticas    - Estadisticas del sistema');
       console.log('');
-      console.log('🔗 Compatibilidad frontend:');
+      console.log('Compatibilidad frontend:');
       console.log('   GET  /api/users           - Monedas (como usuarios)');
       console.log('   GET  /api/posts           - Tipos cambio (como posts)');
     });
 
     // Manejo de cierre graceful
     process.on('SIGTERM', () => {
-      console.log('🔄 SIGTERM recibido, cerrando servidor...');
+      console.log('SIGTERM recibido, cerrando servidor...');
       server.close(() => {
-        console.log('✅ Servidor cerrado');
+        console.log('Servidor cerrado');
         databaseService.closePool();
         process.exit(0);
       });
     });
 
     process.on('SIGINT', () => {
-      console.log('\n🔄 SIGINT recibido (Ctrl+C), cerrando servidor...');
+      console.log('\nSIGINT recibido (Ctrl+C), cerrando servidor...');
       server.close(() => {
-        console.log('✅ Servidor cerrado');
+        console.log('Servidor cerrado');
         databaseService.closePool();
         process.exit(0);
       });
     });
 
   } catch (error) {
-    console.error('❌ Error inicializando la aplicación:', error);
+    console.error('ERROR inicializando la aplicacion:', error);
     process.exit(1);
   }
 }
